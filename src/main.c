@@ -13,13 +13,13 @@ int main(void) {
     GPIOB_PDDR |= (1 << 19 | 1 << 18);
     GPIOB_PTOR = (1 << 18); //ele já estava verde fica vermelho
     while(1) {
-        delayMs(2000);
-        GPIOB_PTOR = (1 << 18); //fica  vermelho
+        //delayMs(2000);
+        //GPIOB_PTOR = (1 << 18); //fica  vermelho
         //verde+vermelho = amarelo
         delayMs(1000);
         GPIOB_PTOR = (1 << 19); //desliga o verde = fica  vermelho
-        delayMs(2000);
-        GPIOB_PTOR = (1 << 18 | 1 << 19); //desliga o vermelho liga verde
+        //delayMs(2000);
+        //GPIOB_PTOR = (1 << 18 | 1 << 19); //desliga o vermelho liga verde
     }
     return 0;
 }
