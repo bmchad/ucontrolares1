@@ -48,34 +48,67 @@ int main(void){
 
     printk("ADC pronto. Entrando no loop de leitura.\n");
 
-    
+    #define LDR_HISTORY_SIZE 5
     int angulo = 0, correcao = 10;
-    int numero_ldr = 4, i = 0;
-    double valor_ldr[numero_ldr];
-    int *veredito = 2;
+    int direcao = 1;
+    int i = 0;
+    double valor_ldr[LDR_HISTORY_SIZE] = {0};
+    int buffer_cheio = 0;
+
+    // Posiciona o servo na origem inicial
     servo_angulo_tempo(angulo, 1);
 
-
     while(1){
+        valor_ldr[i] = ldr_ler(); // Le o LDR
 
-        valor_ldr[i] = ldr_ler();//le o ldr
-        i++; if(i==5) i = 0;
-
-        //verificar se a última leitura do ldr é menor que as primeras, e se sim, mover para a esquerda
-        for(int k = 0; k<numero_ldr; k++){
-            if(valor_ldr[numero_ldr]<valor_ldr[k]) *veredito++;
-            if(*veredito == numero_ldr) *veredito = 0; //é menor
-            else *veredito = -1; //não é menor 
+        i++; 
+        if(i == LDR_HISTORY_SIZE) {
+            i = 0;
+            buffer_cheio = 1; // Temos 5 leituras no historico!
         }
 
-        if (*veredito = 0) {
-            /* Exibe o valor lido convertido em Double */
-            printk("Tensao LDR lida no main: %.2lf mV\n", valor_ldr[i]);
-        } else {
-            printk("Falha ao obter dados do sensor.\n");
+        if (buffer_cheio) {
+            // Indice da leitura que acabamos de fazer
+            int indice_atual = (i == 0) ? (LDR_HISTORY_SIZE - 1) : (i - 1); //sintexa fact ? true : false -> fact i==0, if true indice_atual ta no fim da fila (pois i acabou de zerar)
+            double leitura_atual = valor_ldr[indice_atual];
+            
+            int menor_que_todos = 1;
+            for(int k = 0; k < LDR_HISTORY_SIZE; k++){
+                if(k != indice_atual){
+                    if(leitura_atual >= valor_ldr[k]){
+                        menor_que_todos = 0; // Nao eh a menor leitura, entao a luminosidade nao caiu
+                        break;
+                    }
+                }
+            }
+
+            if (menor_que_todos) { //nao eh a menor leitura
+                printk("Luz diminuiu abaixo do historico! Invertendo direcao e saltando %d graus.\n", correcao);
+                
+                // Inverte a direcao antes de mover para "tatear" buscando a luz
+                direcao = -direcao;
+                angulo += (direcao * correcao);
+
+                // Protecao dos limites do servo (0 a 180 graus)
+                if (angulo > 180) {
+                    angulo = 180;
+                    direcao = -1; // forca a voltar se bater no limite
+                } else if (angulo < 0) {
+                    angulo = 0;
+                    direcao = 1; // forca a ir se bater no limite
+                }
+
+                // Move e espera 1 segundo para a mecanica assentar e nao dar trancos
+                servo_angulo_tempo(angulo, 2);
+                
+                // Reseta o historico para comecar a avaliar a nova posicao
+                buffer_cheio = 0;
+                i = 0;
+            }
         }
 
-        servo_angulo_tempo(correcao, 1);
-
+        k_msleep(200); // Espera 200ms entre as leituras (forma 1 segundo de historico de 5 itens)
+    }
+    
     return 0;
 }
