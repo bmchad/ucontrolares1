@@ -1,317 +1,81 @@
 /* NOTAS
-- VÊ BRANCO: output = 1
-- VÊ PRETO: output = 0
-- É o meio da parte transparente que detecta a linha
-- IN1 = motor direita para trás
-- IN2 = motor direita para frente
-- IN3 = motor esquerda para trás
-- IN4 = motor esquerda para frente
-- Sensor do pino 20 = esquerda
-- Sensor do pino 21 = meio
-- Sensor do pino 22 = direita
+pwm = ptd3
 */
 
 #include <zephyr/kernel.h>             // Funções básicas do Zephyr (ex: k_msleep, k_thread, etc.)
 #include <zephyr/device.h>             // API para obter e utilizar dispositivos do sistema
 #include <zephyr/drivers/gpio.h>       // API para controle de pinos de entrada/saída (GPIO)
 #include <pwm_z42.h>                // Biblioteca personalizada com funções de controle do TPM (Timer/PWM Module)
-#include <sensor-ultrassonico.h>
+#include <ldr.h>
 
-// Define o valor do registrador MOD do TPM para configurar o período do PWM
-#define TPM_MODULE 1000         // Define a frequência do PWM fpwm = (TPM_CLK / (TPM_MODULE * PS))
+// Para um clock de 48 MHz e prescaler de 128 (PS_128), a frequência do timer é 375 kHz.
+// Para um período de 20ms (50Hz), TPM_MODULE (MOD) deve ser 7500.
+// 1ms (0 graus) = 375 contagens.
+// 2ms (180 graus) = 750 contagens.
+#define TPM_MODULE 7500
 #define SLEEP_TIME_MS 1000
-#define INPUT_PORT DT_NODELABEL(gpioe)
-#define INPUT_PIN1 20
-#define INPUT_PIN2 21
-#define INPUT_PIN3 22
+#define INPUT_PORT DT_NODELABEL(gpiod)
+#define INPUT_PIN 20
 
-void direita_m(int duty_n){
-    if (duty_n >= 0) {
-        pwm_tpm_CnV(TPM0, 2, duty_n); //canal 2 in 2 -> direita para frente
-        pwm_tpm_CnV(TPM0, 3, 0);      //canal 3 in 1 -> direita para trás 
-    } else {
-        pwm_tpm_CnV(TPM0, 3, -duty_n); // Reverso
-        pwm_tpm_CnV(TPM0, 2, 0); 
+//aparentemente a cada 180 que peço para esse ir ele só move 90. por isso vou dobrar o angulo no código
+void servo_angulo_tempo(int ang, int t){
+    while(ang>180){
+        ang-=180;
     }
+    while(ang<0){
+        ang+=180;
+    }
+    // 375 é o offset para 1ms (0 graus), (750-375) = variação para até 2ms (180 graus)
+    pwm_tpm_CnV(TPM0, 3, (375 + (2*ang * 375 / 180))); //aqui multiplico por 2 para tentar corrigir 
+    k_msleep((int)(1000 * t));
 }
 
-void esquerda_m(int duty_n){
-    if (duty_n >= 0) {
-        pwm_tpm_CnV(TPM0, 5, duty_n); //canal 5 in 4 -> esquerda para frente
-        pwm_tpm_CnV(TPM0, 0, 0);      //canal 0 in 3 -> esquerda para trás
-    } else {
-        pwm_tpm_CnV(TPM0, 0, -duty_n); // Reverso
-        pwm_tpm_CnV(TPM0, 5, 0); 
-    }
-}
-int duty(int n){
-    uint16_t d = TPM_MODULE*n/100;
-    return d;
-}
-/* CÓDIGO TESTE DE MOTORES ESTÁ FUNCIONANDO PERFEITAMENTE
-int main (void){
-        pwm_tpm_Init(TPM0, TPM_PLLFLL, TPM_MODULE, TPM_CLK, PS_128, EDGE_PWM);
-    pwm_tpm_Ch_Init(TPM0, 3, TPM_PWM_H,GPIOD,3);
-    pwm_tpm_Ch_Init(TPM0, 2, TPM_PWM_H,GPIOD,2);
-    pwm_tpm_Ch_Init(TPM0, 0, TPM_PWM_H,GPIOD,0);
-    pwm_tpm_Ch_Init(TPM0, 5, TPM_PWM_H,GPIOD,5);
-    while(1){
-direita_m(duty(100));
-esquerda_m(duty(0));
-k_msleep(2000);
-
-direita_m(duty(0));
-esquerda_m(duty(0));
-k_msleep(1000);
-
-direita_m(-duty(100));
-esquerda_m(duty(0));
-k_msleep(2000);
-
-direita_m(duty(0));
-esquerda_m(duty(100));
-k_msleep(2000);
-
-direita_m(duty(0));
-esquerda_m(duty(0));
-k_msleep(1000);
-
-direita_m(duty(0));
-esquerda_m(-duty(100));
-k_msleep(2000);
-
-direita_m(duty(0));
-esquerda_m(duty(0));
-k_msleep(3000);
-    }
-    return 0;
-}
-*/
-
-/*CODIGO PARA TESTAR OS SENSORES
-DE FATO 
-VÊ PRETO = 0
-VÊ BRANCO = 1
-int main(void)
-{
-    // Configura os sensores
-    const struct device *input_dev;
-    int esquerda, direita, ret1, ret2;
-	input_dev = DEVICE_DT_GET(INPUT_PORT);
-    if (!input_dev) {
-        printk("Erro ao acessar porta\n");
-        return 1;
-    }
-
-	ret1 = gpio_pin_configure(input_dev, INPUT_PIN1, GPIO_INPUT);
-    
-    if (ret1 != 0) {
-        printk("Erro ao configurar pino %d\n", INPUT_PIN1);
-        return 1;
-    }
-
-	ret2 = gpio_pin_configure(input_dev, INPUT_PIN3, GPIO_INPUT);
-    if (ret2 != 0) {
-        printk("Erro ao configurar pino %d\n", INPUT_PIN3);
-        return 1;
-    }
-
-    // Configura os motores
-    pwm_tpm_Init(TPM0, TPM_PLLFLL, TPM_MODULE, TPM_CLK, PS_8, CENTER_PWM);
-    pwm_tpm_Ch_Init(TPM0, 3, TPM_PWM_H,GPIOD,3);
-    pwm_tpm_Ch_Init(TPM0, 2, TPM_PWM_H,GPIOD,2);
-    pwm_tpm_Ch_Init(TPM0, 0, TPM_PWM_H,GPIOD,0);
-    pwm_tpm_Ch_Init(TPM0, 5, TPM_PWM_H,GPIOD,5);
-
-    while (1) {
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-
-        if (esquerda == 0 && direita == 0) {
-            direita_m(duty(100));
-            esquerda_m(duty(100));
-        }
-        else if (esquerda == 1 && direita == 0) {
-            direita_m(duty(0));
-            esquerda_m(duty(100));
-        }
-        else if (esquerda == 0 && direita == 1) {
-            direita_m(duty(100));
-            esquerda_m(duty(0));
-        }
-        else if (esquerda == 1 && direita == 1) {
-            direita_m(duty(100));
-            esquerda_m(duty(100));
-        }
-    }
-}
-    */
 int main(void){
-    // Configura os sensores
-    const struct device *input_dev;
-    int ret1, ret2, ret3, esquerda, meio, direita;
-	input_dev = DEVICE_DT_GET(INPUT_PORT);
-    if (!input_dev) {
-        printk("Erro ao acessar porta\n");
-        return 1;
-    }
-    //esquerda no pino 20, meio no pino 21 e direita no pino 22, gpioe
-	ret1 = gpio_pin_configure(input_dev, INPUT_PIN1, GPIO_INPUT);
-    if (ret1 != 0) {
-        printk("Erro ao configurar pino %d\n", INPUT_PIN1);
-        return 1;
-    }
-
-	ret2 = gpio_pin_configure(input_dev, INPUT_PIN2, GPIO_INPUT);
-    if (ret2 != 0) {
-        printk("Erro ao configurar pino %d\n", INPUT_PIN2);
-        return 1;
-    }
-    ret3 = gpio_pin_configure(input_dev, INPUT_PIN3, GPIO_INPUT);
-    if (ret3 != 0) {
-        printk("Erro ao configurar pino %d\n", INPUT_PIN3);
-        return 1;
-    }
-
-      //configuração do ultrassom
-float distancia;
-sensorUltrassonicoInit();
 
     // Configura os motores
     pwm_tpm_Init(TPM0, TPM_PLLFLL, TPM_MODULE, TPM_CLK, PS_128, EDGE_PWM);
-    pwm_tpm_Ch_Init(TPM0, 3, TPM_PWM_H,GPIOD,3);
-    pwm_tpm_Ch_Init(TPM0, 2, TPM_PWM_H,GPIOD,2);
-    pwm_tpm_Ch_Init(TPM0, 0, TPM_PWM_H,GPIOD,0);
-    pwm_tpm_Ch_Init(TPM0, 5, TPM_PWM_H,GPIOD,5);
+    pwm_tpm_Ch_Init(TPM0, 3, TPM_PWM_H, GPIOD, 3);
 
-//configuração do sistema de memória
-int n=0; 
-char curva = 'd'; 
-int vmin = 100;
-int sleep = 1;
-    while (1) {
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-        printk("Valor do esquerda: %d\n", esquerda);
-        printk("Valor do meio: %d\n", meio);
-        printk("Valor do direita: %d\n", direita);
-//ptd3 - in1 -> motor d inverso
-//ptd2  - in2 -> motor d direto
-//ptd0 - in3 -> motor e inverso
-//ptd5 - in4 -> motor e direto
-//o carrinho começa com o sensor do meio à esquerda da linha
-//checa se tem esta longe de um obstáculo
-        distancia = calculaDistancia();
-//distancia = 26; //desativa o sensor
-printk("Distancia: %f\n", distancia);
-/*if(maior && menor) {
-    esquerda_m(duty(0));
-    direita_m(duty(0));
-    k_msleep(sleep);
-}
-else */
-if(distancia < 25) {
-        esquerda_m(-duty(50));
-        direita_m(-duty(50));
-        k_msleep(sleep);
-}
-        else{
-       //SISTEMA DE MEMORIA PARA SE ELE SAIR DA PISTA
-       if(esquerda == 1 && meio == 0 && direita == 1) { 
-        // a situação esquerda = 0, meio = 1 e direita = 0 é a iminencia de sair
-        if(curva== 'e'){
-            esquerda_m(duty(90));
-            direita_m(duty(100)); //deve corrigir ao lado contrário da inércia
-            if((esquerda == 1 && meio == 0 && direita == 0) || (esquerda == 1 && meio == 1 && direita == 0)) curva = 'd';
-            k_msleep(sleep);
+    //configura o ldr
+    printk("Iniciando Aplicacao de Monitoramento do LDR...\n");
+
+    // Inicializa o hardware do ADC
+    if (ldr_inicializar() < 0)  //configura o ldr
+    {
+        printk("Falha critica na inicializacao do ADC. Parando.\n");
+        return -1;
     }
-            //saiu da pista pela esquerda (estava virando à direita)
-            else if(curva== 'd'){
-            esquerda_m(duty(100));
-            direita_m(duty(90)); //deve corrigir ao lado contrário da inércia
-            if((esquerda == 0 && meio == 0 && direita == 1) || (esquerda == 0 && meio == 1 && direita == 1)) curva = 'e';
-            k_msleep(sleep);
+
+    printk("ADC pronto. Entrando no loop de leitura.\n");
+
+    
+    int angulo = 0, correcao = 10;
+    int numero_ldr = 4, i = 0;
+    double valor_ldr[numero_ldr];
+    int *veredito = 2;
+    servo_angulo_tempo(angulo, 1);
+
+
+    while(1){
+
+        valor_ldr[i] = ldr_ler();//le o ldr
+        i++; if(i==5) i = 0;
+
+        //verificar se a última leitura do ldr é menor que as primeras, e se sim, mover para a esquerda
+        for(int k = 0; k<numero_ldr; k++){
+            if(valor_ldr[numero_ldr]<valor_ldr[k]) *veredito++;
+            if(*veredito == numero_ldr) *veredito = 0; //é menor
+            else *veredito = -1; //não é menor 
         }
-        n = vmin;
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-}
-/*
-       if(esquerda == 0 && meio == 1 && direita == 0) { 
-        esquerda_m(duty(80));
-        direita_m(duty(80));
-        k_msleep(sleep);
-        n = vmin;
-       }
-        */
-       else if(esquerda == 1 && meio == 1 && direita == 1) { //saiu da pista
-        //saiu da pista pela direita (estava virando à esquerda)
-        //na pratica: se os sensores são todos 0, o melhor comportamento é ele corrigir levemete para o lado da curva
-        if(curva== 'e'){
-            //mudei os lados
-            esquerda_m(duty(100));
-            direita_m(duty(90));
-            if((esquerda == 1 && meio == 0 && direita == 0) || (esquerda == 1 && meio == 1 && direita == 0)) curva = 'd';
-            k_msleep(sleep);
-            n = vmin;
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
+
+        if (*veredito = 0) {
+            /* Exibe o valor lido convertido em Double */
+            printk("Tensao LDR lida no main: %.2lf mV\n", valor_ldr[i]);
+        } else {
+            printk("Falha ao obter dados do sensor.\n");
         }
-            //saiu da pista pela esquerda (estava virando à direita)
-            else if(curva== 'd'){
-                //mudei os lados
-            esquerda_m(duty(90));
-            direita_m(duty(100));
-            if((esquerda == 0 && meio == 0 && direita == 1) || (esquerda == 0 && meio == 1 && direita == 1)) curva = 'e';
-            k_msleep(sleep);
-            n=vmin;
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-}
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-       }
-    //sistema de seugurança para se o sistema de memória falhar, ele para o carrinho
-    else if((esquerda == 0 && meio == 1 && direita == 1) || (esquerda == 0 && meio == 0 && direita == 1)){ //de corrigir à esquerda
-            curva = 'e';
-            esquerda_m(-duty(40));
-            direita_m(duty(70));
-            k_msleep(sleep);
-            n = vmin;
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-    }
-    else if((esquerda == 1 && meio == 1 && direita == 0) || (esquerda == 1 && meio == 0 && direita == 0)){ //de corrigir à direita
-            curva = 'd';
-            esquerda_m(duty(70));
-            direita_m(-duty(40));
-            k_msleep(sleep);
-            n = vmin;
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-    }
-    //não saiu e o sistema de segurança foi verificado, acelera
-        //aceleração gradual a cada 10ms
-        else {
-            uint16_t duty_n = TPM_MODULE*n/100;
-        pwm_tpm_CnV(TPM0, 5, duty_n); //frente esquerda
-        pwm_tpm_CnV(TPM0, 0, 0); //trás esquerda
-        pwm_tpm_CnV(TPM0, 2, duty_n); //frente direita
-        pwm_tpm_CnV(TPM0, 3, 0); //trás direita
-        k_msleep(sleep);
-        if(n<=100) n++;
-        esquerda = gpio_pin_get(input_dev, INPUT_PIN1);
-		meio = gpio_pin_get(input_dev, INPUT_PIN2);
-		direita = gpio_pin_get(input_dev, INPUT_PIN3);
-    }
-}
-    }
+
+        servo_angulo_tempo(correcao, 1);
+
     return 0;
 }
