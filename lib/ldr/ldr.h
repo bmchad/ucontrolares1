@@ -2,6 +2,6 @@
 #define LDR_H
 
 int ldr_inicializar(void);
-double ldr_ler(void);
+double ldr_ler(char lado);
 
 #endif

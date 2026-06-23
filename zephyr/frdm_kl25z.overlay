@@ -3,8 +3,8 @@ status = "okay";
 };
 / {
     zephyr,user {
-        /* Conecta o canal 12 do adc0 ao nó de usuário (Corresponde ao pino A0 da placa) */
-        io-channels = <&adc0 12>;
+        /* Conecta o canal 12 (Direito) e 13 (Esquerdo) do adc0 ao nó de usuário */
+        io-channels = <&adc0 12>, <&adc0 13>;
     };
 };
 
@@ -13,12 +13,21 @@ status = "okay";
     #address-cells = <1>;
     #size-cells = <0>;
 
-    /* Configuração interna para o canal 12 */
+    /* Configuração interna para o canal 12 (LDR Direita) */
     channel@c {
         reg = <12>; /* Reg 0 (0xc) indica o canal analógico interno */
         zephyr,gain = "ADC_GAIN_1";            /* Sem amplificação de ganho */
         zephyr,reference = "ADC_REF_INTERNAL";      /* Utiliza a referência interna de tensão do chip (VREF) */
         zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;               /* Define a amostragem em 12 bits (Valor lido de 0 a 4095) */
+    };
+
+    /* Configuração interna para o canal 13 (LDR Esquerda) */
+    channel@d {
+        reg = <13>; /* Reg 0 (0xd) indica o canal analógico interno */
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_INTERNAL";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
     };
 };
