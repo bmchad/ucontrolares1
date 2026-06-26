@@ -8,7 +8,7 @@ int minuto_atual = 0;
 int segundo_atual = 0;
 
 // Variáveis privadas de controle (o usuário muda a hora inicial aqui)
-static int start_hora = 0;
+static int start_hora = 15;
 static int start_minuto = 0;
 static int start_segundo = 0;
 static int64_t uptime_inicial = 0;

@@ -8,8 +8,8 @@
 // =========================================================
 // PREENCHA ESTAS VARIÁVEIS ANTES DE RODAR O SEU TRACKER!
 // =========================================================
-static int dia = 6;            // Formato DD, ex: 06
-static int mes = 7;            // Formato MM, ex: 07
+static int dia = 23;            // Formato DD, ex: 06
+static int mes = 06;            // Formato MM, ex: 07
 static int ano = 2026;         // Formato AAAA, ex: 2026
 static double phi = -23.5;     // Latitude local (graus, sul é negativo. Ex SP: -23.5)
 static double L = 46.6;        // Longitude local (graus, oeste é positivo. Ex SP: 46.6)
