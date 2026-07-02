@@ -70,7 +70,7 @@ int main(void){
     }
 
     printk("ADC pronto. Entrando no loop de leitura.\n");
-    */
+*/
 /*TESTE 1, MOTORES OK MAS LDR NÃO*/
 /*
     while(1){
@@ -106,9 +106,9 @@ int main(void){
             printk("LDR direito: %f\n", ldr_ler('d'));
             printk("LDR esquerdo: %f\n", ldr_ler('e'));
             k_msleep(500);
-        }
-            */
-    //return 0;
+        }*/
+            
+   // return 0;
 
 //}
 
@@ -148,6 +148,7 @@ int main(void){
     // Posiciona o servo na origem inicial
     servo_horizontal_angulo_tempo(angulo, 1);
     servo_vertical_angulo_tempo(angulo, 1);
+    int contador_vertical = 0;
 
     while(1){
         relogio_atualizar(); // Mantém o relógio preciso atualizando as variáveis globais hora_atual, etc.
@@ -172,7 +173,7 @@ int main(void){
             i = 0;
             buffer_cheio = 1; // Temos LDR_HISTORY_SIZE leituras no historico!
         }
-        #define certeza_parametro 3
+        #define certeza_parametro 5
         if (buffer_cheio) {
             int certeza_esquerda = 0;
             int certeza_direita = 0;
@@ -192,25 +193,29 @@ int main(void){
                 }
             }
 
+            int deve_mover = 0;
+
             if (certeza_esquerda >= certeza_parametro) {
-                printk("Certeza absoluta: Sol na esquerda! Girando %d graus.\n", correcao);
+                printk("Certeza absoluta: Sol na esquerda! Girando %d graus e indo para %d.\n", correcao, angulo+correcao);
                 angulo += correcao; // gira pra esquerda
+                deve_mover = 1;
             } else if (certeza_direita >= certeza_parametro) {
-                printk("Certeza absoluta: Sol na direita! Girando %d graus.\n", correcao);
+                printk("Certeza absoluta: Sol na direita! Girando %d graus e indo para %d.\n", correcao, angulo-correcao);
                 angulo -= correcao; // gira pra direita
+                deve_mover = 1;
             } else {
                 // Não tem certeza (oscilação, nuvem ou luz equilibrada), fica parado!
             }
 
             // Protecao dos limites do servo horizontal (0 a 180 graus)
-            if (angulo > 180) {
-                angulo = 180;
-            } else if (angulo < 0) {
-                angulo = 0;
+            if (angulo >= 170) {
+                angulo = 170;
+            } else if (angulo <= 10) {
+                angulo = 10;
             }
 
             // Se decidiu se mover, aplica o movimento e reseta o buffer
-            if (certeza_esquerda || certeza_direita) {
+            if (deve_mover && angulo <= 170 && angulo >= 10) {
                 servo_horizontal_angulo_tempo(angulo, 2);
             }
             
@@ -218,10 +223,16 @@ int main(void){
             buffer_cheio = 0;
             i = 0;
         }
+        if(contador_vertical == 0){
         theta = calcular_theta((double)(hora_atual + minuto_atual/60.0 + segundo_atual/3600.0), angulo);
         theta = arredondar_para_multiplo_de_5(theta);
         servo_vertical_angulo_tempo((int)theta, 2); // lembrando que o servo não aceita mudanças suaves
-        k_msleep(200); // Espera 200ms entre as leituras (forma 1 segundo de historico de LDR_HISTORY_SIZE itens)
+        k_msleep(200);
+        }
+        contador_vertical++; if(contador_vertical == 300){
+            contador_vertical = 0;
+        }
+                k_msleep(1000);
     }
     
     return 0;
